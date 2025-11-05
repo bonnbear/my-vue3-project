@@ -45,8 +45,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import Sortable from 'sortablejs';
-import { ElCard, ElTable, ElTableColumn, ElIcon, ElInput } from 'element-plus';
-import { Rank } from '@element-plus/icons-vue';
 
 // 表格資料
 const tableData = ref([

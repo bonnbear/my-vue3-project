@@ -39,20 +39,24 @@
         </template>
       </el-table-column>
     </el-table>
+    
+    <!-- 雷達圖 -->
+    <div ref="radarChart" style="width: 100%; height: 400px; margin-top: 20px;"></div>
   </el-card>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import Sortable from 'sortablejs';
+import * as echarts from 'echarts';
 
 // 表格資料
 const tableData = ref([
-  { id: 1, name: 'Alice', role: 'Developer' },
-  { id: 2, name: 'Bob', role: 'Designer' },
-  { id: 3, name: 'Charlie', role: 'Project Manager' },
-  { id: 4, name: 'David', role: 'Tester' },
-  { id: 5, name: 'Eve', role: 'DevOps Engineer' },
+  { id: 1, name: 'Alice', role: 'Developer', skills: { coding: 90, design: 60, management: 50, testing: 70, communication: 80 } },
+  { id: 2, name: 'Bob', role: 'Designer', skills: { coding: 50, design: 95, management: 60, testing: 55, communication: 85 } },
+  { id: 3, name: 'Charlie', role: 'Project Manager', skills: { coding: 60, design: 65, management: 95, testing: 70, communication: 90 } },
+  { id: 4, name: 'David', role: 'Tester', skills: { coding: 75, design: 55, management: 60, testing: 95, communication: 75 } },
+  { id: 5, name: 'Eve', role: 'DevOps Engineer', skills: { coding: 85, design: 50, management: 70, testing: 80, communication: 70 } },
 ]);
 
 // 追蹤正在編輯的儲存格，格式為 { rowId, prop }
@@ -91,9 +95,82 @@ const initSortable = () => {
   });
 };
 
+// 雷達圖 ref
+const radarChart = ref(null);
+let chartInstance = null;
+
+// 初始化雷達圖
+const initRadarChart = () => {
+  if (!radarChart.value) return;
+  
+  // 如果已存在實例，先銷毀
+  if (chartInstance) {
+    chartInstance.dispose();
+  }
+  
+  chartInstance = echarts.init(radarChart.value);
+  
+  const option = {
+    title: {
+      text: '團隊成員技能雷達圖',
+      left: 'center'
+    },
+    tooltip: {
+      trigger: 'item'
+    },
+    legend: {
+      orient: 'vertical',
+      right: 10,
+      top: 'center',
+      data: tableData.value.map(item => item.name)
+    },
+    radar: {
+      indicator: [
+        { name: '編碼能力', max: 100 },
+        { name: '設計能力', max: 100 },
+        { name: '管理能力', max: 100 },
+        { name: '測試能力', max: 100 },
+        { name: '溝通能力', max: 100 }
+      ],
+      radius: '60%'
+    },
+    series: [
+      {
+        name: '技能評分',
+        type: 'radar',
+        data: tableData.value.map(item => ({
+          value: [
+            item.skills.coding,
+            item.skills.design,
+            item.skills.management,
+            item.skills.testing,
+            item.skills.communication
+          ],
+          name: item.name
+        }))
+      }
+    ]
+  };
+  
+  chartInstance.setOption(option);
+};
+
+// 監聽表格資料變化，更新雷達圖
+watch(tableData, () => {
+  initRadarChart();
+}, { deep: true });
+
 // 在組件掛載後執行
 onMounted(() => {
   initSortable();
+  initRadarChart();
+  
+  // 監聽視窗大小變化，自動調整圖表大小
+  window.addEventListener('resize', () => {
+    if (chartInstance) {
+      chartInstance.resize();
+    }
+  });
 });
 </script>
 

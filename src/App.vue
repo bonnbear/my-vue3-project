@@ -1,196 +1,369 @@
 <template>
-  <el-card class="box-card">
-    <template #header>
-      <div class="card-header">
-        <span>可拖曳排序的 Element Plus 表格</span>
+  <div class="collapsible-card">
+    <div class="card-header">
+      <button class="toggle-btn" @click="toggle">
+        <span class="arrow" :class="{ expanded: isExpanded }">▼</span>
+      </button>
+      <h3 class="card-title">{{ title }}</h3>
+    </div>
+    <div class="card-body" :class="{ collapsed: !isExpanded, expanded: isExpanded }">
+      <div class="progress-item" v-for="item in items" :key="item.id">
+        <div class="item-label">{{ item.label }}</div>
+        
+        <div class="progress-track">
+          <div class="progress-line">
+            <div 
+              class="progress-line-fill"
+              :style="{ width: getProgressWidth(item.currentStep, item.nodes.length) + '%' }"
+            ></div>
+          </div>
+          
+          <div class="progress-nodes">
+            <div 
+              class="node" 
+              v-for="(node, index) in item.nodes" 
+              :key="index"
+            >
+              <div 
+                class="node-circle"
+                :class="getNodeStatus(index, item.currentStep)"
+              ></div>
+              <span 
+                class="node-label"
+                :class="getNodeStatus(index, item.currentStep)"
+              >{{ node }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="status-indicator">
+          <component 
+            :is="statusConfig[item.status]?.icon" 
+            class="status-icon" 
+            :style="{ color: statusConfig[item.status]?.color }"
+          />
+          <span class="status-text" :class="item.status">{{ item.statusText }}</span>
+        </div>
       </div>
-    </template>
-    <el-table :data="tableData" row-key="id" style="width: 100%">
-      <el-table-column label="拖曳" width="80" align="center">
-        <template #default>
-          <el-icon class="drag-handle" :size="20"><Rank /></el-icon>
-        </template>
-      </el-table-column>
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="姓名" width="180">
-        <template #default="{ row }">
-          <el-input
-            v-if="editingCell?.rowId === row.id && editingCell?.prop === 'name'"
-            v-model="row.name"
-            @blur="handleInputBlur"
-            placeholder="請輸入姓名"
-          ></el-input>
-          <div v-else @click="handleCellClick(row, 'name')" class="cell-content">
-            {{ row.name }}
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column prop="role" label="角色">
-        <template #default="{ row }">
-          <el-input
-            v-if="editingCell?.rowId === row.id && editingCell?.prop === 'role'"
-            v-model="row.role"
-            @blur="handleInputBlur"
-            placeholder="請輸入角色"
-          ></el-input>
-          <div v-else @click="handleCellClick(row, 'role')" class="cell-content">
-            {{ row.role }}
-          </div>
-        </template>
-      </el-table-column>
-    </el-table>
-    
-    <!-- 雷達圖 -->
-    <div ref="radarChart" style="width: 100%; height: 400px; margin-top: 20px;"></div>
-  </el-card>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
-import Sortable from 'sortablejs';
-import * as echarts from 'echarts';
+import { ref } from 'vue';
 
-// 表格資料
-const tableData = ref([
-  { id: 1, name: 'Alice', role: 'Developer', skills: { coding: 90, design: 60, management: 50, testing: 70, communication: 80 } },
-  { id: 2, name: 'Bob', role: 'Designer', skills: { coding: 50, design: 95, management: 60, testing: 55, communication: 85 } },
-  { id: 3, name: 'Charlie', role: 'Project Manager', skills: { coding: 60, design: 65, management: 95, testing: 70, communication: 90 } },
-  { id: 4, name: 'David', role: 'Tester', skills: { coding: 75, design: 55, management: 60, testing: 95, communication: 75 } },
-  { id: 5, name: 'Eve', role: 'DevOps Engineer', skills: { coding: 85, design: 50, management: 70, testing: 80, communication: 70 } },
+const title = ref('季度專案進度');
+const items = ref([
+  {
+    id: 'proj-a',
+    label: '核心引擎升級',
+    currentStep: 2,
+    nodes: ['規劃', '設計', '開發', '測試', '部署'],
+    status: 'running',
+    statusText: '進行中'
+  },
+  {
+    id: 'proj-b',
+    label: '使用者介面重構',
+    currentStep: 4,
+    nodes: ['需求分析', '原型設計', 'UI/UX 設計', '前端開發', '整合測試'],
+    status: 'completed',
+    statusText: '已完成'
+  },
+  {
+    id: 'proj-c',
+    label: '後端 API 優化',
+    currentStep: 1,
+    nodes: ['效能分析', '重構', '壓力測試', '上線'],
+    status: 'pending',
+    statusText: '待開始'
+  },
+  {
+    id: 'proj-d',
+    label: '文件系統遷移',
+    currentStep: 0,
+    nodes: ['評估', '遷移', '驗證'],
+    status: 'paused',
+    statusText: '已暫停'
+  }
 ]);
 
-// 追蹤正在編輯的儲存格，格式為 { rowId, prop }
-const editingCell = ref(null);
+const isExpanded = ref(true);
 
-// 進入編輯模式
-const handleCellClick = (row, prop) => {
-  editingCell.value = { rowId: row.id, prop };
+const statusConfig = {
+  running: { icon: 'Loading', color: '#4CAF50' },
+  completed: { icon: 'CircleCheck', color: '#2196F3' },
+  pending: { icon: 'Clock', color: '#FF9800' },
+  paused: { icon: 'VideoPause', color: '#9E9E9E' }
 };
 
-// 退出編輯模式
-const handleInputBlur = () => {
-  editingCell.value = null;
+const toggle = () => {
+  isExpanded.value = !isExpanded.value;
 };
 
-// 初始化 Sortable
-const initSortable = () => {
-  // 獲取表格的 tbody 元素
-  const el = document.querySelector('.el-table__body-wrapper tbody');
-  if (!el) {
-    console.error('Element-Plus table body not found.');
-    return;
+const getNodeStatus = (nodeIndex, currentStep) => {
+  if (nodeIndex < currentStep) {
+    return 'completed';
+  } else if (nodeIndex === currentStep) {
+    return 'active';
   }
-
-  Sortable.create(el, {
-    handle: '.drag-handle', // 指定拖曳操作的目標元素
-    animation: 150, // 動畫效果
-    onEnd: (evt) => {
-      // 拖曳結束後的回呼
-      const { oldIndex, newIndex } = evt;
-      
-      // 重新排列資料
-      const movedItem = tableData.value.splice(oldIndex, 1)[0];
-      tableData.value.splice(newIndex, 0, movedItem);
-    },
-  });
+  return 'pending';
 };
 
-// 雷達圖 ref
-const radarChart = ref(null);
-let chartInstance = null;
-
-// 初始化雷達圖
-const initRadarChart = () => {
-  if (!radarChart.value) return;
-  
-  // 如果已存在實例，先銷毀
-  if (chartInstance) {
-    chartInstance.dispose();
-  }
-  
-  chartInstance = echarts.init(radarChart.value);
-  
-  const option = {
-    title: {
-      text: '團隊成員技能雷達圖',
-      left: 'center'
-    },
-    tooltip: {
-      trigger: 'item'
-    },
-    legend: {
-      orient: 'vertical',
-      right: 10,
-      top: 'center',
-      data: tableData.value.map(item => item.name)
-    },
-    radar: {
-      indicator: [
-        { name: '編碼能力', max: 100 },
-        { name: '設計能力', max: 100 },
-        { name: '管理能力', max: 100 },
-        { name: '測試能力', max: 100 },
-        { name: '溝通能力', max: 100 }
-      ],
-      radius: '60%'
-    },
-    series: [
-      {
-        name: '技能評分',
-        type: 'radar',
-        data: tableData.value.map(item => ({
-          value: [
-            item.skills.coding,
-            item.skills.design,
-            item.skills.management,
-            item.skills.testing,
-            item.skills.communication
-          ],
-          name: item.name
-        }))
-      }
-    ]
-  };
-  
-  chartInstance.setOption(option);
+const getProgressWidth = (currentStep, totalSteps) => {
+  return (currentStep / (totalSteps - 1)) * 100;
 };
-
-// 監聽表格資料變化，更新雷達圖
-watch(tableData, () => {
-  initRadarChart();
-}, { deep: true });
-
-// 在組件掛載後執行
-onMounted(() => {
-  initSortable();
-  initRadarChart();
-  
-  // 監聽視窗大小變化，自動調整圖表大小
-  window.addEventListener('resize', () => {
-    if (chartInstance) {
-      chartInstance.resize();
-    }
-  });
-});
 </script>
 
 <style scoped>
-.box-card {
-  margin: 20px;
+.collapsible-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+  overflow: hidden;
 }
+
 .card-header {
+  padding: 16px 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.card-header:hover {
+  background: #e9ecef;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.toggle-btn {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+  margin-right: 12px;
+}
+
+.toggle-btn:hover {
+  color: #333;
+}
+
+.arrow {
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.card-body {
+  overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+}
+
+.card-body.collapsed {
+  max-height: 0;
+  padding: 0;
+}
+
+.card-body.expanded {
+  max-height: 2000px;
+  padding: 20px;
+}
+
+.progress-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #f0f0f0;
+  min-height: 80px;
+}
+
+.progress-item:last-child {
+  border-bottom: none;
+}
+
+.item-label {
+  width: 33.33%;
+  font-size: 15px;
+  color: #333;
+  font-weight: 500;
+  padding-right: 20px;
+  flex-shrink: 0;
+}
+
+.progress-track {
+  width: 33.33%;
+  position: relative;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  flex-shrink: 0;
+}
+
+.progress-line {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  right: 10px;
+  height: 4px;
+  background: #e9ecef;
+  transform: translateY(-50%);
+  border-radius: 2px;
+}
+
+.progress-line-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #66BB6A);
+  transition: width 0.5s ease;
+  border-radius: 2px;
+}
+
+.progress-nodes {
+  position: relative;
+  width: 100%;
   display: flex;
   justify-content: space-between;
+  z-index: 1;
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 6px;
 }
-.drag-handle {
-  cursor: grab;
+
+.node-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  border: 3px solid #e9ecef;
+  transition: all 0.3s ease;
+  position: relative;
 }
-.drag-handle:active {
-  cursor: grabbing;
+
+.node-circle.active {
+  background: #4CAF50;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.2);
+  animation: pulse-node 2s infinite;
 }
-.cell-content {
-  min-height: 24px; /* 確保空白儲存格也可以點擊 */
-  cursor: pointer;
+
+.node-circle.completed {
+  background: #4CAF50;
+  border-color: #4CAF50;
+}
+
+.node-circle.completed::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+@keyframes pulse-node {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(76, 175, 80, 0);
+  }
+}
+
+.node-label {
+  font-size: 12px;
+  color: #999;
+  white-space: nowrap;
+  transition: color 0.3s ease;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-label.active {
+  color: #4CAF50;
+  font-weight: 600;
+}
+
+.node-label.completed {
+  color: #666;
+}
+
+.status-indicator {
+  width: 33.33%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.status-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.status-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.status-text.running {
+  color: #4CAF50;
+}
+
+.status-text.pending {
+  color: #FF9800;
+}
+
+.status-text.completed {
+  color: #2196F3;
+}
+
+.status-text.paused {
+  color: #9E9E9E;
+}
+
+@media (max-width: 992px) {
+  .progress-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 15px;
+    padding: 16px;
+  }
+
+  .item-label,
+  .progress-track,
+  .status-indicator {
+    width: 100%;
+  }
+
+  .status-indicator {
+    justify-content: flex-start;
+  }
 }
 </style>

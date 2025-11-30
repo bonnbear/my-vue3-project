@@ -29,12 +29,12 @@
     <transition name="tree-node-expand">
       <ul class="tree-node-children" v-if="isFolder && isOpen">
         <TreeNode
-          v-for="(child, index) in node.children"
+          v-for="(child, index) in visibleChildren"
           :key="child.name"
           :node="child"
           :selected-id="selectedId"
           :level="level + 1"
-          :is-last="index === node.children.length - 1"
+          :is-last="index === visibleChildren.length - 1"
           @node-click="$emit('node-click', $event)"
           :path="[...path, node]"
         />
@@ -63,6 +63,12 @@ const isOpen = ref(props.node.isOpen || false);
 const isFolder = computed(() => props.node.children && props.node.children.length > 0);
 const isSelected = computed(() => props.node.name === props.selectedId);
 const indent = computed(() => props.level * 18);
+
+// Filter visible children for rendering
+const visibleChildren = computed(() => {
+  if (!props.node.children) return [];
+  return props.node.children.filter(child => child.visible !== false);
+});
 
 const toggle = () => {
   if (isFolder.value) {

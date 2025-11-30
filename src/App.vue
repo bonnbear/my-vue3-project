@@ -3,11 +3,25 @@
     <div class="card-container" :class="{ 'sidebar-collapsed': !isSidebarOpen }">
       <div class="sidebar-container">
         <div class="sidebar-header">文件浏览器</div>
+        <!-- Search Input -->
+        <div class="sidebar-search" v-if="isSidebarOpen">
+          <el-input
+            v-model="filterText"
+            placeholder="搜索..."
+            clearable
+            size="small"
+          >
+            <template #prefix>
+              <Search style="width: 1em; height: 1em; margin-right: 8px;" />
+            </template>
+          </el-input>
+        </div>
         <div class="sidebar-content">
           <div class="tree-wrapper">
             <ul class="tree-node-root">
               <TreeNode
                 v-for="(node, index) in treeData"
+                v-show="node.visible !== false"
                 :key="node.name"
                 :node="node"
                 :selected-id="selectedNodeId"
@@ -70,10 +84,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, computed, watch } from 'vue';
 import TreeNode from './TreeNode.vue';
 
 const isSidebarOpen = ref(true);
+const filterText = ref('');
+
 const treeData = reactive([
   { name: '项目根目录', isOpen: true, checked: false, children: [
       { name: 'src', isOpen: true, checked: false, children: [
@@ -101,6 +117,45 @@ const handleNodeClick = (path) => {
 
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value;
+};
+
+// --- Search Logic ---
+watch(filterText, (val) => {
+  filterTree(treeData, val);
+});
+
+const filterTree = (nodes, query) => {
+  let hasVisible = false;
+  for (const node of nodes) {
+    // If query is empty, show all
+    if (!query) {
+      node.visible = true;
+      if (node.children) {
+        filterTree(node.children, query);
+      }
+      continue;
+    }
+
+    // Check children first
+    let childVisible = false;
+    if (node.children) {
+      childVisible = filterTree(node.children, query);
+    }
+
+    // Check self
+    const selfVisible = node.name.toLowerCase().includes(query.toLowerCase());
+
+    // Determine visibility
+    node.visible = selfVisible || childVisible;
+
+    // Auto expand if children match
+    if (childVisible) {
+      node.isOpen = true;
+    }
+    
+    if (node.visible) hasVisible = true;
+  }
+  return hasVisible;
 };
 
 // --- Checkbox Logic ---
@@ -156,6 +211,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 .card-container { display: flex; height: calc(100vh - 40px); min-height: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); overflow: hidden; position: relative;
   .sidebar-container { width: 320px; flex-shrink: 0; background-color: #fafbfc; border-right: 1px solid #e1e4e8; transition: width 0.3s ease-in-out; overflow: hidden; display: flex; flex-direction: column;
     .sidebar-header { padding: 20px 24px; font-weight: 600; font-size: 16px; border-bottom: 1px solid #e1e4e8; background-color: #fff; color: #24292e; flex-shrink: 0; white-space: nowrap; }
+    .sidebar-search { padding: 10px 24px; border-bottom: 1px solid #e1e4e8; background-color: #fff; flex-shrink: 0; }
     .sidebar-content { flex-grow: 1; overflow-y: auto; overflow-x: hidden; background-color: #fafbfc;
       &::-webkit-scrollbar { width: 6px; } &::-webkit-scrollbar-track { background: transparent; } &::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; &:hover { background: #b0b7c3; } }
     }

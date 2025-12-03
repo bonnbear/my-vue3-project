@@ -22,9 +22,10 @@
               <TreeNode
                 v-for="(node, index) in treeData"
                 v-show="node.visible !== false"
-                :key="node.name"
+                :key="node.id"
                 :node="node"
                 :selected-id="selectedNodeId"
+                :locked-ids="lockedIdList"
                 :level="0"
                 @node-click="handleNodeClick"
                 :is-last="index === treeData.length - 1"
@@ -55,6 +56,29 @@
             </p>
           </div>
 
+          <!-- 锁定ID列表设置区域 -->
+          <div class="locked-ids-area">
+            <div class="locked-ids-header">
+              <h3>锁定的节点ID列表</h3>
+            </div>
+            <div class="locked-ids-input">
+              <el-input
+                v-model="lockedIdsInput"
+                placeholder="输入要锁定的ID，用逗号分隔 (例如: 1,3,5)"
+                @change="updateLockedIds"
+              />
+            </div>
+            <div class="locked-ids-display" v-if="lockedIdList.length > 0">
+              <el-tag
+                v-for="id in lockedIdList"
+                :key="id"
+                class="locked-id-tag"
+              >
+                ID: {{ id }}
+              </el-tag>
+            </div>
+          </div>
+
           <!-- 穿梭框/已选标签区域 -->
           <div class="transfer-box-area">
             <div class="transfer-header">
@@ -64,8 +88,8 @@
             <div class="tags-container" v-if="checkedNodes.length > 0">
               <el-tag
                 v-for="node in checkedNodes"
-                :key="node.name"
-                closable
+                :key="node.id"
+                :closable="!lockedIdList.includes(node.id)"
                 @close="removeTag(node)"
                 class="selected-tag"
               >
@@ -84,26 +108,137 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import TreeNode from './TreeNode.vue';
 
 const isSidebarOpen = ref(true);
 const filterText = ref('');
+const lockedIdsInput = ref('1,3,5'); // 默认锁定的ID
+const lockedIdList = ref([1, 3, 5]); // 锁定的ID列表
 
+// 四層結構的樹資料，每個節點都有唯一的 id 屬性
 const treeData = reactive([
-  { name: '项目根目录', isOpen: true, checked: false, children: [
-      { name: 'src', isOpen: true, checked: false, children: [
-          { name: 'App.vue', checked: false },
-          { name: 'main.js', checked: false },
-          { name: 'components', checked: false, children: [ { name: 'Button.vue', checked: false }, { name: 'Modal.vue', checked: false }, { name: 'Card.vue', checked: false } ] },
-          { name: 'views', checked: false, children: [ { name: 'Home.vue', checked: false }, { name: 'About.vue', checked: false } ] }
-      ]},
-      { name: 'public', checked: false, children: [ { name: 'index.html', checked: false }, { name: 'favicon.ico', checked: false } ]},
-      { name: 'package.json', checked: false },
-      { name: 'README.md', checked: false },
-      { name: 'vite.config.js', checked: false }
-  ]},
-  { name: '文档', checked: false, children: [ { name: 'guide.md', checked: false }, { name: 'api.md', checked: false } ] }
+  { 
+    id: 100,
+    name: '公司总部', 
+    isOpen: true, 
+    checked: false, 
+    children: [
+      { 
+        id: 110,
+        name: '技术部', 
+        isOpen: true, 
+        checked: false, 
+        children: [
+          { 
+            id: 111,
+            name: '前端组', 
+            isOpen: true, 
+            checked: false, 
+            children: [
+              // 第四層 - 有 type 屬性，會顯示 checkbox
+              { id: 1, name: '张三', type: 'employee', checked: false },
+              { id: 2, name: '李四', type: 'employee', checked: false },
+              { id: 3, name: '王五', type: 'employee', checked: false }
+            ] 
+          },
+          { 
+            id: 112,
+            name: '后端组', 
+            isOpen: false, 
+            checked: false, 
+            children: [
+              { id: 4, name: '赵六', type: 'employee', checked: false },
+              { id: 5, name: '钱七', type: 'employee', checked: false }
+            ] 
+          },
+          { 
+            id: 113,
+            name: '测试组', 
+            isOpen: false, 
+            checked: false, 
+            children: [
+              { id: 6, name: '孙八', type: 'employee', checked: false },
+              { id: 7, name: '周九', type: 'employee', checked: false }
+            ] 
+          }
+        ]
+      },
+      { 
+        id: 120,
+        name: '产品部', 
+        isOpen: false, 
+        checked: false, 
+        children: [
+          { 
+            id: 121,
+            name: '产品设计组', 
+            checked: false, 
+            children: [
+              { id: 8, name: '吴十', type: 'employee', checked: false },
+              { id: 9, name: '郑十一', type: 'employee', checked: false }
+            ] 
+          },
+          { 
+            id: 122,
+            name: '用户研究组', 
+            checked: false, 
+            children: [
+              { id: 10, name: '冯十二', type: 'employee', checked: false }
+            ] 
+          }
+        ]
+      },
+      { 
+        id: 130,
+        name: '运营部', 
+        isOpen: false, 
+        checked: false, 
+        children: [
+          { 
+            id: 131,
+            name: '市场推广组', 
+            checked: false, 
+            children: [
+              { id: 11, name: '陈十三', type: 'employee', checked: false },
+              { id: 12, name: '褚十四', type: 'employee', checked: false }
+            ] 
+          }
+        ]
+      }
+    ]
+  },
+  { 
+    id: 200,
+    name: '分公司A', 
+    checked: false, 
+    children: [
+      { 
+        id: 210,
+        name: '销售部', 
+        checked: false, 
+        children: [
+          { 
+            id: 211,
+            name: '华东区', 
+            checked: false, 
+            children: [
+              { id: 13, name: '卫十五', type: 'employee', checked: false },
+              { id: 14, name: '蒋十六', type: 'employee', checked: false }
+            ] 
+          },
+          { 
+            id: 212,
+            name: '华南区', 
+            checked: false, 
+            children: [
+              { id: 15, name: '沈十七', type: 'employee', checked: false }
+            ] 
+          }
+        ] 
+      }
+    ] 
+  }
 ]);
 
 const selectedNodeId = ref(null);
@@ -118,6 +253,35 @@ const handleNodeClick = (path) => {
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value;
 };
+
+// --- 更新锁定ID列表 ---
+const updateLockedIds = () => {
+  const ids = lockedIdsInput.value
+    .split(',')
+    .map(s => parseInt(s.trim()))
+    .filter(n => !isNaN(n));
+  lockedIdList.value = ids;
+  
+  // 自动选中锁定的节点
+  setLockedNodesChecked(treeData, ids);
+};
+
+// 递归设置锁定节点为选中状态
+const setLockedNodesChecked = (nodes, ids) => {
+  for (const node of nodes) {
+    if (ids.includes(node.id)) {
+      node.checked = true;
+    }
+    if (node.children && node.children.length > 0) {
+      setLockedNodesChecked(node.children, ids);
+    }
+  }
+};
+
+// 初始化时设置锁定节点为选中状态
+onMounted(() => {
+  setLockedNodesChecked(treeData, lockedIdList.value);
+});
 
 // --- Search Logic ---
 watch(filterText, (val) => {
@@ -179,13 +343,20 @@ const checkedNodes = computed(() => {
 });
 
 const removeTag = (node) => {
+  // 如果节点被锁定，不允许移除
+  if (lockedIdList.value.includes(node.id)) {
+    return;
+  }
   node.checked = false;
 };
 
 const clearAllTags = () => {
   const clearNodes = (nodes) => {
     nodes.forEach(node => {
-      node.checked = false;
+      // 只清除未锁定的节点
+      if (!lockedIdList.value.includes(node.id)) {
+        node.checked = false;
+      }
       if (node.children) {
         clearNodes(node.children);
       }
@@ -241,6 +412,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 /* --- 树形组件外部容器样式 --- */
 .tree-wrapper {
   padding: 8px 0;
+}
+
+/* --- 锁定ID区域样式 --- */
+.locked-ids-area {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+}
+
+.locked-ids-header {
+  margin-bottom: 12px;
+  
+  h3 {
+    margin: 0;
+    font-size: 16px;
+    color: #24292e;
+  }
+}
+
+.locked-ids-input {
+  margin-bottom: 12px;
+}
+
+.locked-ids-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.locked-id-tag {
+  background-color: #e3f2fd;
+  border-color: #bbdefb;
+  color: #0969da;
 }
 
 /* --- 穿梭框区域样式 --- */

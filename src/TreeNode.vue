@@ -19,8 +19,11 @@
       <span v-else class="node-expand-icon placeholder"></span>
 
       <span class="node-content-wrapper">
-        <span class="node-checkbox" @click.stop>
-          <el-checkbox v-model="node.checked" />
+        <span v-if="node.type" class="node-checkbox" @click.stop>
+          <el-checkbox 
+            v-model="node.checked" 
+            :disabled="isLocked"
+          />
         </span>
         <span class="node-label">{{ node.name }}</span>
       </span>
@@ -30,9 +33,10 @@
       <ul class="tree-node-children" v-if="isFolder && isOpen">
         <TreeNode
           v-for="(child, index) in visibleChildren"
-          :key="child.name"
+          :key="child.id"
           :node="child"
           :selected-id="selectedId"
+          :locked-ids="lockedIds"
           :level="level + 1"
           :is-last="index === visibleChildren.length - 1"
           @node-click="$emit('node-click', $event)"
@@ -44,11 +48,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 const props = defineProps({
   node: { type: Object, required: true },
   selectedId: { type: [String, Number, null], default: null },
+  lockedIds: { type: Array, default: () => [] },
   level: { type: Number, default: 0 },
   isLast: { type: Boolean, default: false },
   path: {
@@ -63,6 +68,18 @@ const isOpen = ref(props.node.isOpen || false);
 const isFolder = computed(() => props.node.children && props.node.children.length > 0);
 const isSelected = computed(() => props.node.name === props.selectedId);
 const indent = computed(() => props.level * 18);
+
+// 检查当前节点是否被锁定
+const isLocked = computed(() => {
+  return props.lockedIds.includes(props.node.id);
+});
+
+// 当节点被锁定时，确保它是选中状态
+watch(isLocked, (locked) => {
+  if (locked && !props.node.checked) {
+    props.node.checked = true;
+  }
+}, { immediate: true });
 
 // Filter visible children for rendering
 const visibleChildren = computed(() => {

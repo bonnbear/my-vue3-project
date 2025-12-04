@@ -1,90 +1,138 @@
 <template>
   <div id="app-wrapper">
-    <div class="card-container" :class="{ 'sidebar-collapsed': !isSidebarOpen }">
-      <div class="sidebar-container">
-        <div class="sidebar-header">文件浏览器</div>
-        <!-- Search Input -->
-        <div class="sidebar-search" v-if="isSidebarOpen">
+    <div class="demo-container">
+      <h1>穿梭框示例</h1>
+      <p>点击下方按钮打开穿梭框选择器</p>
+      
+      <!-- 已选标签预览 -->
+      <div class="selected-preview" v-if="checkedNodes.length > 0">
+        <span class="preview-label">已选择：</span>
+        <el-tag
+          v-for="node in checkedNodes"
+          :key="node.id"
+          :closable="!lockedIdList.includes(node.id)"
+          @close="removeTag(node)"
+          size="small"
+          class="preview-tag"
+        >
+          {{ node.name }}
+        </el-tag>
+      </div>
+      
+      <!-- 打开穿梭框按钮 -->
+      <el-button type="primary" @click="dialogVisible = true">
+        <Plus style="width: 1em; height: 1em; margin-right: 4px;" />
+        选择人员
+      </el-button>
+      
+      <!-- 锁定ID设置 -->
+      <div class="locked-ids-area">
+        <div class="locked-ids-header">
+          <h3>锁定的节点ID列表</h3>
+        </div>
+        <div class="locked-ids-input">
           <el-input
-            v-model="filterText"
-            placeholder="搜索..."
-            clearable
+            v-model="lockedIdsInput"
+            placeholder="输入要锁定的ID，用逗号分隔 (例如: 1,3,5)"
+            @change="updateLockedIds"
+          />
+        </div>
+        <div class="locked-ids-display" v-if="lockedIdList.length > 0">
+          <el-tag
+            v-for="id in lockedIdList"
+            :key="id"
+            class="locked-id-tag"
             size="small"
           >
-            <template #prefix>
-              <Search style="width: 1em; height: 1em; margin-right: 8px;" />
-            </template>
-          </el-input>
-        </div>
-        <div class="sidebar-content">
-          <div class="tree-wrapper">
-            <ul class="tree-node-root">
-              <TreeNode
-                v-for="(node, index) in treeData"
-                v-show="node.visible !== false"
-                :key="node.id"
-                :node="node"
-                :selected-id="selectedNodeId"
-                :locked-ids="lockedIdList"
-                :level="0"
-                @node-click="handleNodeClick"
-                :is-last="index === treeData.length - 1"
-              />
-            </ul>
-          </div>
+            ID: {{ id }}
+          </el-tag>
         </div>
       </div>
+    </div>
 
-      <button @click="toggleSidebar" class="sidebar-toggle">
-        {{ isSidebarOpen ? '‹' : '›' }}
-      </button>
-
-      <div class="main-content">
-        <div class="main-header">
-          <h1>主内容区域</h1>
+    <!-- 穿梭框弹框 -->
+    <el-dialog
+      v-model="dialogVisible"
+      title="选择人员"
+      width="800px"
+      :close-on-click-modal="false"
+      class="transfer-dialog"
+    >
+      <div class="transfer-container">
+        <!-- 左侧面板：树形结构 -->
+        <div class="transfer-panel transfer-panel-left">
+          <div class="transfer-panel-header">
+            <span class="transfer-panel-title">可选列表</span>
+            <span class="transfer-panel-count">{{ totalLeafCount }} 项</span>
+          </div>
+          <div class="transfer-panel-filter">
+            <el-input
+              v-model="filterText"
+              placeholder="搜索..."
+              clearable
+              size="small"
+            >
+              <template #prefix>
+                <Search style="width: 1em; height: 1em;" />
+              </template>
+            </el-input>
+          </div>
+          <div class="transfer-panel-body">
+            <div class="tree-wrapper">
+              <ul class="tree-node-root">
+                <TreeNode
+                  v-for="(node, index) in treeData"
+                  v-show="node.visible !== false"
+                  :key="node.id"
+                  :node="node"
+                  :selected-id="selectedNodeId"
+                  :locked-ids="lockedIdList"
+                  :level="0"
+                  @node-click="handleNodeClick"
+                  :is-last="index === treeData.length - 1"
+                />
+              </ul>
+            </div>
+          </div>
         </div>
-        <div class="main-body">
-          <p>当左侧侧边栏收起时，这里的内容会平滑地占据更多空间。</p>
-          
-          <div v-if="selectedNodePath.length > 0" class="selected-info">
-            <p>
-              当前选中的节点是: <strong>{{ selectedNodeId }}</strong>
-            </p>
-            <p style="margin-top: 8px;">
-              完整路径: 
-              <span class="path-display">{{ selectedNodePath.map(p => p.name).join(' / ') }}</span>
-            </p>
-          </div>
 
-          <!-- 锁定ID列表设置区域 -->
-          <div class="locked-ids-area">
-            <div class="locked-ids-header">
-              <h3>锁定的节点ID列表</h3>
-            </div>
-            <div class="locked-ids-input">
-              <el-input
-                v-model="lockedIdsInput"
-                placeholder="输入要锁定的ID，用逗号分隔 (例如: 1,3,5)"
-                @change="updateLockedIds"
-              />
-            </div>
-            <div class="locked-ids-display" v-if="lockedIdList.length > 0">
-              <el-tag
-                v-for="id in lockedIdList"
-                :key="id"
-                class="locked-id-tag"
-              >
-                ID: {{ id }}
-              </el-tag>
-            </div>
-          </div>
+        <!-- 中间操作按钮 -->
+        <div class="transfer-buttons">
+          <el-button
+            type="primary"
+            :icon="ArrowRight"
+            :disabled="!hasUncheckedNodes"
+            @click="addAllVisible"
+            circle
+          />
+          <el-button
+            type="primary"
+            :icon="ArrowLeft"
+            :disabled="!hasRemovableNodes"
+            @click="removeAllUnlocked"
+            circle
+          />
+        </div>
 
-          <!-- 穿梭框/已选标签区域 -->
-          <div class="transfer-box-area">
-            <div class="transfer-header">
-              <h3>已选标签 ({{ checkedNodes.length }})</h3>
-              <el-button type="primary" link @click="clearAllTags" v-if="checkedNodes.length > 0">清空</el-button>
+        <!-- 右侧面板：已选列表 -->
+        <div class="transfer-panel transfer-panel-right">
+          <div class="transfer-panel-header">
+            <div class="transfer-panel-header-left">
+              <span class="transfer-panel-title">已选列表</span>
+              <span class="transfer-panel-count">{{ checkedNodes.length }} 项</span>
             </div>
+            <el-button 
+              type="primary" 
+              link 
+              size="small"
+              @click="resetToDefault"
+              :disabled="!hasRemovableNodes"
+            >
+              <RefreshRight style="width: 14px; height: 14px; margin-right: 2px;" />
+              恢复默认
+            </el-button>
+          </div>
+          <div class="transfer-panel-body">
             <div class="tags-container" v-if="checkedNodes.length > 0">
               <el-tag
                 v-for="node in checkedNodes"
@@ -96,27 +144,34 @@
                 {{ node.name }}
               </el-tag>
             </div>
-            <div v-else class="empty-tags">
-              请在左侧目录树中勾选项目
+            <div v-else class="transfer-empty">
+              <span>暂无数据</span>
             </div>
           </div>
-
         </div>
       </div>
-    </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="dialogVisible = false">确定</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue';
 import TreeNode from './TreeNode.vue';
+import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue';
 
-const isSidebarOpen = ref(true);
+const dialogVisible = ref(false);
 const filterText = ref('');
-const lockedIdsInput = ref('1,3,5'); // 默认锁定的ID
-const lockedIdList = ref([1, 3, 5]); // 锁定的ID列表
+const lockedIdsInput = ref('1,3,5');
+const lockedIdList = ref([1, 3, 5]);
 
-// 四層結構的樹資料，每個節點都有唯一的 id 屬性
+// 四層結構的樹資料
 const treeData = reactive([
   { 
     id: 100,
@@ -136,7 +191,6 @@ const treeData = reactive([
             isOpen: true, 
             checked: false, 
             children: [
-              // 第四層 - 有 type 屬性，會顯示 checkbox
               { id: 1, name: '张三', type: 'employee', checked: false },
               { id: 2, name: '李四', type: 'employee', checked: false },
               { id: 3, name: '王五', type: 'employee', checked: false }
@@ -242,16 +296,10 @@ const treeData = reactive([
 ]);
 
 const selectedNodeId = ref(null);
-const selectedNodePath = ref([]);
 
 const handleNodeClick = (path) => {
   const clickedNode = path[path.length - 1];
   selectedNodeId.value = clickedNode.name;
-  selectedNodePath.value = path;
-};
-
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value;
 };
 
 // --- 更新锁定ID列表 ---
@@ -261,12 +309,9 @@ const updateLockedIds = () => {
     .map(s => parseInt(s.trim()))
     .filter(n => !isNaN(n));
   lockedIdList.value = ids;
-  
-  // 自动选中锁定的节点
   setLockedNodesChecked(treeData, ids);
 };
 
-// 递归设置锁定节点为选中状态
 const setLockedNodesChecked = (nodes, ids) => {
   for (const node of nodes) {
     if (ids.includes(node.id)) {
@@ -278,7 +323,6 @@ const setLockedNodesChecked = (nodes, ids) => {
   }
 };
 
-// 初始化时设置锁定节点为选中状态
 onMounted(() => {
   setLockedNodesChecked(treeData, lockedIdList.value);
 });
@@ -291,7 +335,6 @@ watch(filterText, (val) => {
 const filterTree = (nodes, query) => {
   let hasVisible = false;
   for (const node of nodes) {
-    // If query is empty, show all
     if (!query) {
       node.visible = true;
       if (node.children) {
@@ -300,19 +343,14 @@ const filterTree = (nodes, query) => {
       continue;
     }
 
-    // Check children first
     let childVisible = false;
     if (node.children) {
       childVisible = filterTree(node.children, query);
     }
 
-    // Check self
     const selfVisible = node.name.toLowerCase().includes(query.toLowerCase());
-
-    // Determine visibility
     node.visible = selfVisible || childVisible;
 
-    // Auto expand if children match
     if (childVisible) {
       node.isOpen = true;
     }
@@ -323,12 +361,10 @@ const filterTree = (nodes, query) => {
 };
 
 // --- Checkbox Logic ---
-
-// 递归获取所有被勾选的节点
 const getCheckedNodes = (nodes) => {
   let checked = [];
   for (const node of nodes) {
-    if (node.checked) {
+    if (node.checked && node.type) {
       checked.push(node);
     }
     if (node.children && node.children.length > 0) {
@@ -342,85 +378,147 @@ const checkedNodes = computed(() => {
   return getCheckedNodes(treeData);
 });
 
+// 计算总叶子节点数
+const countLeafNodes = (nodes) => {
+  let count = 0;
+  for (const node of nodes) {
+    if (node.type) {
+      count++;
+    }
+    if (node.children && node.children.length > 0) {
+      count += countLeafNodes(node.children);
+    }
+  }
+  return count;
+};
+
+const totalLeafCount = computed(() => countLeafNodes(treeData));
+
+// 检查是否有未选中的节点
+const hasUncheckedNodes = computed(() => {
+  const checkUnchecked = (nodes) => {
+    for (const node of nodes) {
+      if (node.type && !node.checked) return true;
+      if (node.children && checkUnchecked(node.children)) return true;
+    }
+    return false;
+  };
+  return checkUnchecked(treeData);
+});
+
+// 检查是否有可移除的节点
+const hasRemovableNodes = computed(() => {
+  return checkedNodes.value.some(node => !lockedIdList.value.includes(node.id));
+});
+
+// 添加所有可见的未选中节点
+const addAllVisible = () => {
+  const addNodes = (nodes) => {
+    for (const node of nodes) {
+      if (node.type && !node.checked && node.visible !== false) {
+        node.checked = true;
+      }
+      if (node.children) {
+        addNodes(node.children);
+      }
+    }
+  };
+  addNodes(treeData);
+};
+
+// 移除所有未锁定的节点
+const removeAllUnlocked = () => {
+  const removeNodes = (nodes) => {
+    for (const node of nodes) {
+      if (node.type && node.checked && !lockedIdList.value.includes(node.id)) {
+        node.checked = false;
+      }
+      if (node.children) {
+        removeNodes(node.children);
+      }
+    }
+  };
+  removeNodes(treeData);
+};
+
+// 恢复默认：只保留锁定的节点
+const resetToDefault = () => {
+  const resetNodes = (nodes) => {
+    for (const node of nodes) {
+      if (node.type) {
+        // 只有锁定的节点保持选中，其他全部取消
+        node.checked = lockedIdList.value.includes(node.id);
+      }
+      if (node.children) {
+        resetNodes(node.children);
+      }
+    }
+  };
+  resetNodes(treeData);
+};
+
 const removeTag = (node) => {
-  // 如果节点被锁定，不允许移除
   if (lockedIdList.value.includes(node.id)) {
     return;
   }
   node.checked = false;
 };
-
-const clearAllTags = () => {
-  const clearNodes = (nodes) => {
-    nodes.forEach(node => {
-      // 只清除未锁定的节点
-      if (!lockedIdList.value.includes(node.id)) {
-        node.checked = false;
-      }
-      if (node.children) {
-        clearNodes(node.children);
-      }
-    });
-  };
-  clearNodes(treeData);
-};
 </script>
 
 <style lang="scss" scoped>
-/* [重构] App.vue 现在只包含与自身布局和树的根容器相关的样式 */
-.path-display {
-  color: #586069;
-  background-color: #eef0f2;
-  padding: 2px 6px;
+#app-wrapper {
+  padding: 40px;
+  min-height: 100vh;
+  background-color: #f5f7fa;
+}
+
+.demo-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 30px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+
+  h1 {
+    margin: 0 0 10px 0;
+    font-size: 24px;
+    color: #303133;
+  }
+
+  p {
+    margin: 0 0 20px 0;
+    color: #606266;
+  }
+}
+
+.selected-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 12px;
+  background-color: #f5f7fa;
   border-radius: 4px;
-  font-family: 'Courier New', Courier, monospace;
-}
 
-* { box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; background-color: #f4f7f9; overflow-x: hidden; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-#app-wrapper { padding: 20px; width: 100%; max-width: 1400px; }
-.card-container { display: flex; height: calc(100vh - 40px); min-height: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); overflow: hidden; position: relative;
-  .sidebar-container { width: 320px; flex-shrink: 0; background-color: #fafbfc; border-right: 1px solid #e1e4e8; transition: width 0.3s ease-in-out; overflow: hidden; display: flex; flex-direction: column;
-    .sidebar-header { padding: 20px 24px; font-weight: 600; font-size: 16px; border-bottom: 1px solid #e1e4e8; background-color: #fff; color: #24292e; flex-shrink: 0; white-space: nowrap; }
-    .sidebar-search { padding: 10px 24px; border-bottom: 1px solid #e1e4e8; background-color: #fff; flex-shrink: 0; }
-    .sidebar-content { flex-grow: 1; overflow-y: auto; overflow-x: hidden; background-color: #fafbfc;
-      &::-webkit-scrollbar { width: 6px; } &::-webkit-scrollbar-track { background: transparent; } &::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; &:hover { background: #b0b7c3; } }
-    }
+  .preview-label {
+    color: #606266;
+    font-size: 14px;
   }
-  .sidebar-toggle { position: absolute; top: 20px; left: 320px; transform: translateX(-50%); width: 28px; height: 28px; background-color: #fff; color: #586069; border: 1px solid #e1e4e8; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); z-index: 10; transition: left 0.3s ease-in-out, background-color 0.2s, transform 0.2s;
-    &:hover { background-color: #f6f8fa; transform: translateX(-50%) scale(1.05); }
-    &:active { transform: translateX(-50%) scale(0.95); }
-  }
-  .main-content { flex-grow: 1; display: flex; flex-direction: column; background-color: #fff; transition: margin-left 0.3s ease-in-out;
-    .main-header { padding: 20px 30px; background-color: #fff; border-bottom: 1px solid #e1e4e8; flex-shrink: 0;
-      h1 { margin: 0; font-size: 24px; font-weight: 600; color: #24292e; }
-    }
-    .main-body { padding: 30px; flex-grow: 1; overflow-y: auto;
-      .selected-info { margin-top: 20px; padding: 16px; background-color: #f6f8fa; border-radius: 6px; border-left: 4px solid #0969da;
-        p { margin: 0; color: #586069;
-          strong { color: #24292e; font-weight: 600; }
-        }
-      }
-    }
-  }
-  &.sidebar-collapsed {
-    .sidebar-container { width: 0; border-right-color: transparent; }
-    .sidebar-toggle { left: 20px; }
-  }
-}
 
-/* --- 树形组件外部容器样式 --- */
-.tree-wrapper {
-  padding: 8px 0;
+  .preview-tag {
+    margin: 0;
+  }
 }
 
 /* --- 锁定ID区域样式 --- */
 .locked-ids-area {
-  margin-top: 20px;
+  margin-top: 30px;
   padding: 20px;
-  background-color: #f6f8fa;
-  border: 1px solid #e1e4e8;
-  border-radius: 8px;
+  background-color: #f5f7fa;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
 }
 
 .locked-ids-header {
@@ -428,8 +526,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
   
   h3 {
     margin: 0;
-    font-size: 16px;
-    color: #24292e;
+    font-size: 14px;
+    font-weight: 500;
+    color: #303133;
   }
 }
 
@@ -444,60 +543,148 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
 }
 
 .locked-id-tag {
-  background-color: #e3f2fd;
-  border-color: #bbdefb;
-  color: #0969da;
+  background-color: #ecf5ff;
+  border-color: #d9ecff;
+  color: #409eff;
 }
 
-/* --- 穿梭框区域样式 --- */
-.transfer-box-area {
-  margin-top: 30px;
-  padding: 20px;
-  background-color: #fff;
-  border: 1px solid #e1e4e8;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
-.transfer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eaecef;
-  
-  h3 {
-    margin: 0;
-    font-size: 16px;
-    color: #24292e;
+/* --- 穿梭框弹框样式 --- */
+:deep(.transfer-dialog) {
+  .el-dialog__body {
+    padding: 0;
   }
 }
 
+.transfer-container {
+  display: flex;
+  align-items: stretch;
+  height: 450px;
+}
+
+.transfer-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background-color: #fff;
+  overflow: hidden;
+}
+
+.transfer-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 40px;
+  padding: 0 15px;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid #ebeef5;
+  box-sizing: border-box;
+}
+
+.transfer-panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transfer-panel-title {
+  font-size: 14px;
+  color: #303133;
+  font-weight: 500;
+}
+
+.transfer-panel-count {
+  font-size: 12px;
+  color: #909399;
+}
+
+.transfer-panel-filter {
+  padding: 10px 15px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.transfer-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background-color: #c0c4cc;
+    border-radius: 3px;
+    
+    &:hover {
+      background-color: #909399;
+    }
+  }
+  
+  &::-webkit-scrollbar-track {
+    background-color: #f5f7fa;
+  }
+}
+
+.tree-wrapper {
+  padding: 8px 0;
+}
+
+/* --- 中间按钮样式 --- */
+.transfer-buttons {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+}
+
+/* --- 右侧已选标签样式 --- */
 .tags-container {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  padding: 15px;
+  align-content: flex-start;
 }
 
 .selected-tag {
-  background-color: #e3f2fd;
-  border-color: #bbdefb;
-  color: #0969da;
+  margin: 0;
+  background-color: #ecf5ff;
+  border-color: #d9ecff;
+  color: #409eff;
+  
+  &:hover {
+    background-color: #d9ecff;
+  }
+  
+  :deep(.el-tag__close) {
+    color: #409eff;
+    
+    &:hover {
+      background-color: #409eff;
+      color: #fff;
+    }
+  }
 }
 
-.empty-tags {
-  color: #6e7781;
-  font-style: italic;
-  text-align: center;
-  padding: 20px 0;
+.transfer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #909399;
+  font-size: 14px;
 }
 
-/*
-  因为 .tree-node-root 是在 App.vue 的模板中渲染的 <ul>,
-  所以它的样式规则需要保留在这里。
-  使用 :deep() 是为了确保它能应用到 TreeNode 组件的根元素上。
-*/
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* --- 树形组件根样式 --- */
 :deep(.tree-node-root) {
   list-style: none;
   padding: 0;

@@ -109,4 +109,8 @@ const toggleNodeCheck = inject('toggleNodeCheck');
 
 ## 6. 結論
 
+<<<<<<< HEAD
 採用 **provide/inject** 配合 **:model-value/@change** 是處理深層遞迴組件狀態管理的最佳實踐。它既保留了跨層級通訊的便利性（避免了 props drilling 和 event bubbling），又嚴格遵守了單向數據流原則，讓狀態管理更加可預測。
+=======
+採用 **provide/inject** 配合 **:model-value/@change** 是處理深層遞迴組件狀態管理的最佳實踐。它既保留了跨層級通訊的便利性（避免了 props drilling 和 event bubbling），又嚴格遵守了單向數據流原則，讓狀態管理更加可預測。
+>>>>>>> ea2d1ad (chore: save local changes before pull)

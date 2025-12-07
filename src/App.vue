@@ -126,7 +126,7 @@
               link 
               size="small"
               @click="resetToDefault"
-              :disabled="!hasRemovableNodes"
+              :disabled="!hasRemovableNodes && removedDefaultOptions.length === 0"
             >
               <RefreshRight style="width: 14px; height: 14px; margin-right: 2px;" />
               恢复默认
@@ -146,6 +146,21 @@
             </div>
             <div v-else class="transfer-empty">
               <span>暂无数据</span>
+            </div>
+          </div>
+          
+          <!-- 提示区域：显示被取消的默认选项 -->
+          <div class="transfer-panel-footer" v-if="removedDefaultOptions.length > 0">
+            <div class="removed-defaults-alert">
+              <div class="alert-title">
+                <Warning style="width: 14px; height: 14px; margin-right: 4px;" />
+                已取消的默认选项：
+              </div>
+              <div class="removed-items">
+                <span v-for="node in removedDefaultOptions" :key="node.id" class="removed-item-text">
+                  {{ node.name }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -170,6 +185,8 @@ const dialogVisible = ref(false);
 const filterText = ref('');
 const lockedIdsInput = ref('1,3,5');
 const lockedIdList = ref([1, 3, 5]);
+// 默认选中但可移除的ID列表
+const defaultRemovableIds = ref([2, 4]);
 
 // 四層結構的樹資料
 const treeData = reactive([
@@ -309,22 +326,23 @@ const updateLockedIds = () => {
     .map(s => parseInt(s.trim()))
     .filter(n => !isNaN(n));
   lockedIdList.value = ids;
-  setLockedNodesChecked(treeData, ids);
+  setNodesChecked(treeData, [...ids, ...defaultRemovableIds.value]);
 };
 
-const setLockedNodesChecked = (nodes, ids) => {
+const setNodesChecked = (nodes, ids) => {
   for (const node of nodes) {
     if (ids.includes(node.id)) {
       node.checked = true;
     }
     if (node.children && node.children.length > 0) {
-      setLockedNodesChecked(node.children, ids);
+      setNodesChecked(node.children, ids);
     }
   }
 };
 
 onMounted(() => {
-  setLockedNodesChecked(treeData, lockedIdList.value);
+  // 初始化时，选中 锁定ID 和 默认可移除ID
+  setNodesChecked(treeData, [...lockedIdList.value, ...defaultRemovableIds.value]);
 });
 
 // --- Search Logic ---
@@ -376,6 +394,26 @@ const getCheckedNodes = (nodes) => {
 
 const checkedNodes = computed(() => {
   return getCheckedNodes(treeData);
+});
+
+// 计算被取消的默认选项
+const removedDefaultOptions = computed(() => {
+  const currentCheckedIds = checkedNodes.value.map(n => n.id);
+  const missingIds = defaultRemovableIds.value.filter(id => !currentCheckedIds.includes(id));
+  
+  if (missingIds.length === 0) return [];
+
+  const missingNodes = [];
+  const findMissing = (nodes) => {
+    for (const node of nodes) {
+      if (missingIds.includes(node.id)) {
+        missingNodes.push(node);
+      }
+      if (node.children) findMissing(node.children);
+    }
+  };
+  findMissing(treeData);
+  return missingNodes;
 });
 
 // 计算总叶子节点数
@@ -441,13 +479,15 @@ const removeAllUnlocked = () => {
   removeNodes(treeData);
 };
 
-// 恢复默认：只保留锁定的节点
+// 恢复默认：保留锁定的节点 和 默认可移除的节点
 const resetToDefault = () => {
   const resetNodes = (nodes) => {
     for (const node of nodes) {
       if (node.type) {
-        // 只有锁定的节点保持选中，其他全部取消
-        node.checked = lockedIdList.value.includes(node.id);
+        // 锁定的 OR 默认可移除的 保持选中
+        const isLocked = lockedIdList.value.includes(node.id);
+        const isDefaultRemovable = defaultRemovableIds.value.includes(node.id);
+        node.checked = isLocked || isDefaultRemovable;
       }
       if (node.children) {
         resetNodes(node.children);
@@ -676,6 +716,39 @@ const removeTag = (node) => {
   height: 100%;
   color: #909399;
   font-size: 14px;
+}
+
+/* --- 右侧底部提示样式 --- */
+.transfer-panel-footer {
+  border-top: 1px solid #ebeef5;
+  background-color: #fdf6ec;
+  padding: 10px 15px;
+}
+
+.removed-defaults-alert {
+  font-size: 12px;
+  color: #e6a23c;
+}
+
+.alert-title {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.removed-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 18px; /* Align with text start */
+}
+
+.removed-item-text {
+  color: #e6a23c;
+  background-color: rgba(230, 162, 60, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .dialog-footer {

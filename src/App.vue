@@ -1,766 +1,743 @@
 <template>
-  <div id="app-wrapper">
-    <div class="demo-container">
-      <h1>穿梭框示例</h1>
-      <p>点击下方按钮打开穿梭框选择器</p>
-      
-      <!-- 已选标签预览 -->
-      <div class="selected-preview" v-if="checkedNodes.length > 0">
-        <span class="preview-label">已选择：</span>
-        <el-tag
-          v-for="node in checkedNodes"
-          :key="node.id"
-          :closable="!lockedIdList.includes(node.id)"
-          @close="removeTag(node)"
-          size="small"
-          class="preview-tag"
-        >
-          {{ node.name }}
-        </el-tag>
-      </div>
-      
-      <!-- 打开穿梭框按钮 -->
-      <el-button type="primary" @click="dialogVisible = true">
-        <Plus style="width: 1em; height: 1em; margin-right: 4px;" />
-        选择人员
-      </el-button>
-      
-      <!-- 锁定ID设置 -->
-      <div class="locked-ids-area">
-        <div class="locked-ids-header">
-          <h3>锁定的节点ID列表</h3>
-        </div>
-        <div class="locked-ids-input">
-          <el-input
-            v-model="lockedIdsInput"
-            placeholder="输入要锁定的ID，用逗号分隔 (例如: 1,3,5)"
-            @change="updateLockedIds"
-          />
-        </div>
-        <div class="locked-ids-display" v-if="lockedIdList.length > 0">
-          <el-tag
-            v-for="id in lockedIdList"
-            :key="id"
-            class="locked-id-tag"
-            size="small"
+  <div class="page">
+    <header class="toolbar">
+      <div class="toolbar__left">
+        <div class="seg">
+          <button
+            class="seg__btn"
+            :class="{ 'is-active': engine === 'vue-grid-layout' }"
+            @click="engine = 'vue-grid-layout'"
           >
-            ID: {{ id }}
-          </el-tag>
+            vue-grid-layout
+          </button>
+          <button
+            class="seg__btn"
+            :class="{ 'is-active': engine === 'gridstack' }"
+            @click="engine = 'gridstack'"
+          >
+            gridstack.js
+          </button>
         </div>
+
+        <button class="btn" :class="{ 'is-active': isEditMode }" @click="toggleEditMode">
+          {{ isEditMode ? '編輯模式（可拖曳/縮放）' : '瀏覽模式（不可拖曳/縮放）' }}
+        </button>
+
+        <div class="divider" />
+
+        <button class="btn" :disabled="!isEditMode" @click="addItemPreset('sm')">新增 3×3</button>
+        <button class="btn" :disabled="!isEditMode" @click="addItemPreset('md')">新增 4×4</button>
+        <button class="btn" :disabled="!isEditMode" @click="addItemPreset('lg')">新增 6×4</button>
       </div>
-    </div>
 
-    <!-- 穿梭框弹框 -->
-    <el-dialog
-      v-model="dialogVisible"
-      title="选择人员"
-      width="800px"
-      :close-on-click-modal="false"
-      class="transfer-dialog"
-    >
-      <div class="transfer-container">
-        <!-- 左侧面板：树形结构 -->
-        <div class="transfer-panel transfer-panel-left">
-          <div class="transfer-panel-header">
-            <span class="transfer-panel-title">可选列表</span>
-            <span class="transfer-panel-count">{{ totalLeafCount }} 项</span>
-          </div>
-          <div class="transfer-panel-filter">
-            <el-input
-              v-model="filterText"
-              placeholder="搜索..."
-              clearable
-              size="small"
-            >
-              <template #prefix>
-                <Search style="width: 1em; height: 1em;" />
-              </template>
-            </el-input>
-          </div>
-          <div class="transfer-panel-body">
-            <div class="tree-wrapper">
-              <ul class="tree-node-root">
-                <TreeNode
-                  v-for="(node, index) in treeData"
-                  v-show="node.visible !== false"
-                  :key="node.id"
-                  :node="node"
-                  :selected-id="selectedNodeId"
-                  :locked-ids="lockedIdList"
-                  :level="0"
-                  @node-click="handleNodeClick"
-                  :is-last="index === treeData.length - 1"
-                />
-              </ul>
-            </div>
-          </div>
-        </div>
+      <div class="toolbar__right">
+        <button class="btn" @click="saveLayout">保存（localStorage）</button>
+        <button class="btn" @click="loadLayout">載入（localStorage）</button>
+        <button class="btn btn--danger" @click="resetToDefault">重置預設</button>
+      </div>
+    </header>
 
-        <!-- 中间操作按钮 -->
-        <div class="transfer-buttons">
-          <el-button
-            type="primary"
-            :icon="ArrowRight"
-            :disabled="!hasUncheckedNodes"
-            @click="addAllVisible"
-            circle
+    <section class="hint">
+      <div class="hint__title">說明</div>
+      <ul>
+        <li>
+          兩個版本都做到：新增/刪除 item、保存/載入、瀏覽/編輯切換、卡片內容、v-for 渲染。
+        </li>
+        <li>
+          「保存/載入到後端」此 demo 以 localStorage 模擬；你可以把 save/load 函數內的序列化資料改成 axios/fetch 對接真正 API。
+        </li>
+        <li>
+          新增卡片會提供 w/h，並交給各自引擎做 auto placement（不手算 x/y）。
+        </li>
+      </ul>
+    </section>
+
+    <!-- A) vue-grid-layout -->
+    <section v-if="engine === 'vue-grid-layout'" class="stage">
+      <div class="stage__title">A. vue-grid-layout（Vue 原生元件）</div>
+
+      <GridLayout
+        v-model:layout="vglLayout"
+        :col-num="12"
+        :row-height="28"
+        :is-draggable="isEditMode"
+        :is-resizable="isEditMode"
+        :vertical-compact="true"
+        :use-css-transforms="true"
+        :margin="[10, 10]"
+      >
+        <GridItem
+          v-for="item in vglLayout"
+          :key="item.i"
+          :x="item.x"
+          :y="item.y"
+          :w="item.w"
+          :h="item.h"
+          :i="item.i"
+        >
+          <Card
+            :title="item.title"
+            :content="item.content"
+            :show-delete="isEditMode"
+            @delete="removeItem(item.i)"
           />
-          <el-button
-            type="primary"
-            :icon="ArrowLeft"
-            :disabled="!hasRemovableNodes"
-            @click="removeAllUnlocked"
-            circle
-          />
-        </div>
+        </GridItem>
+      </GridLayout>
+    </section>
 
-        <!-- 右侧面板：已选列表 -->
-        <div class="transfer-panel transfer-panel-right">
-          <div class="transfer-panel-header">
-            <div class="transfer-panel-header-left">
-              <span class="transfer-panel-title">已选列表</span>
-              <span class="transfer-panel-count">{{ checkedNodes.length }} 项</span>
-            </div>
-            <el-button 
-              type="primary" 
-              link 
-              size="small"
-              @click="resetToDefault"
-              :disabled="!hasRemovableNodes && removedDefaultOptions.length === 0"
-            >
-              <RefreshRight style="width: 14px; height: 14px; margin-right: 2px;" />
-              恢复默认
-            </el-button>
-          </div>
-          <div class="transfer-panel-body">
-            <div class="tags-container" v-if="checkedNodes.length > 0">
-              <el-tag
-                v-for="node in checkedNodes"
-                :key="node.id"
-                :closable="!lockedIdList.includes(node.id)"
-                @close="removeTag(node)"
-                class="selected-tag"
-              >
-                {{ node.name }}
-              </el-tag>
-            </div>
-            <div v-else class="transfer-empty">
-              <span>暂无数据</span>
-            </div>
-          </div>
-          
-          <!-- 提示区域：显示被取消的默认选项 -->
-          <div class="transfer-panel-footer" v-if="removedDefaultOptions.length > 0">
-            <div class="removed-defaults-alert">
-              <div class="alert-title">
-                <Warning style="width: 14px; height: 14px; margin-right: 4px;" />
-                已取消的默认选项：
-              </div>
-              <div class="removed-items">
-                <span v-for="node in removedDefaultOptions" :key="node.id" class="removed-item-text">
-                  {{ node.name }}
-                </span>
-              </div>
-            </div>
+    <!-- B) gridstack -->
+    <section v-else class="stage">
+      <div class="stage__title">B. gridstack.js（通用 library + Vue 手動整合）</div>
+
+      <div class="grid-stack" ref="gridRef">
+        <div
+          v-for="item in gsItems"
+          :key="item.id"
+          class="grid-stack-item"
+          :gs-id="item.id"
+          :gs-w="item.w"
+          :gs-h="item.h"
+          :gs-x="item.x"
+          :gs-y="item.y"
+        >
+          <div class="grid-stack-item-content">
+            <Card
+              :title="item.title"
+              :content="item.content"
+              :show-delete="isEditMode"
+              @delete="removeItem(item.id)"
+            />
           </div>
         </div>
       </div>
-
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="dialogVisible = false">确定</el-button>
-        </div>
-      </template>
-    </el-dialog>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue';
-import TreeNode from './TreeNode.vue';
-import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue';
+import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-const dialogVisible = ref(false);
-const filterText = ref('');
-const lockedIdsInput = ref('1,3,5');
-const lockedIdList = ref([1, 3, 5]);
-// 默认选中但可移除的ID列表
-const defaultRemovableIds = ref([2, 4]);
+// Note: 專案已安裝 vue-grid-layout 與 gridstack。
+// vue-grid-layout 目前在 dependencies 是 ^3.0.0-beta1（Vue 3 版）。
 
-// 四層結構的樹資料
-const treeData = reactive([
-  { 
-    id: 100,
-    name: '公司总部', 
-    isOpen: true, 
-    checked: false, 
-    children: [
-      { 
-        id: 110,
-        name: '技术部', 
-        isOpen: true, 
-        checked: false, 
-        children: [
-          { 
-            id: 111,
-            name: '前端组', 
-            isOpen: true, 
-            checked: false, 
-            children: [
-              { id: 1, name: '张三', type: 'employee', checked: false },
-              { id: 2, name: '李四', type: 'employee', checked: false },
-              { id: 3, name: '王五', type: 'employee', checked: false }
-            ] 
-          },
-          { 
-            id: 112,
-            name: '后端组', 
-            isOpen: false, 
-            checked: false, 
-            children: [
-              { id: 4, name: '赵六', type: 'employee', checked: false },
-              { id: 5, name: '钱七', type: 'employee', checked: false }
-            ] 
-          },
-          { 
-            id: 113,
-            name: '测试组', 
-            isOpen: false, 
-            checked: false, 
-            children: [
-              { id: 6, name: '孙八', type: 'employee', checked: false },
-              { id: 7, name: '周九', type: 'employee', checked: false }
-            ] 
-          }
-        ]
-      },
-      { 
-        id: 120,
-        name: '产品部', 
-        isOpen: false, 
-        checked: false, 
-        children: [
-          { 
-            id: 121,
-            name: '产品设计组', 
-            checked: false, 
-            children: [
-              { id: 8, name: '吴十', type: 'employee', checked: false },
-              { id: 9, name: '郑十一', type: 'employee', checked: false }
-            ] 
-          },
-          { 
-            id: 122,
-            name: '用户研究组', 
-            checked: false, 
-            children: [
-              { id: 10, name: '冯十二', type: 'employee', checked: false }
-            ] 
-          }
-        ]
-      },
-      { 
-        id: 130,
-        name: '运营部', 
-        isOpen: false, 
-        checked: false, 
-        children: [
-          { 
-            id: 131,
-            name: '市场推广组', 
-            checked: false, 
-            children: [
-              { id: 11, name: '陈十三', type: 'employee', checked: false },
-              { id: 12, name: '褚十四', type: 'employee', checked: false }
-            ] 
-          }
-        ]
-      }
-    ]
+import { GridStack } from 'gridstack'
+import 'gridstack/dist/gridstack.min.css'
+
+/**
+ * 這個 Repo 有「單一檔案架構」限制：所有 UI/邏輯都放在 src/App.vue
+ * 因此我用 defineComponent 在同檔宣告 Card。
+ */
+const Card = defineComponent({
+  name: 'DemoCard',
+  props: {
+    title: { type: String, required: true },
+    content: { type: String, required: true },
+    showDelete: { type: Boolean, default: false },
   },
-  { 
-    id: 200,
-    name: '分公司A', 
-    checked: false, 
-    children: [
-      { 
-        id: 210,
-        name: '销售部', 
-        checked: false, 
-        children: [
-          { 
-            id: 211,
-            name: '华东区', 
-            checked: false, 
-            children: [
-              { id: 13, name: '卫十五', type: 'employee', checked: false },
-              { id: 14, name: '蒋十六', type: 'employee', checked: false }
-            ] 
-          },
-          { 
-            id: 212,
-            name: '华南区', 
-            checked: false, 
-            children: [
-              { id: 15, name: '沈十七', type: 'employee', checked: false }
-            ] 
-          }
-        ] 
-      }
-    ] 
+  emits: ['delete'],
+  setup(props, { emit }) {
+    return () =>
+      h('div', { class: 'card' }, [
+        h('div', { class: 'card__header' }, [
+          h('div', { class: 'card__title' }, props.title),
+          props.showDelete
+            ? h(
+                'button',
+                {
+                  class: 'card__delete',
+                  title: '刪除',
+                  onClick: (e) => {
+                    e.stopPropagation()
+                    emit('delete')
+                  },
+                },
+                '✕'
+              )
+            : null,
+        ]),
+        h('div', { class: 'card__content' }, props.content),
+      ])
+  },
+})
+
+/**
+ * Demo 狀態
+ */
+const engine = ref('vue-grid-layout') // 'vue-grid-layout' | 'gridstack'
+const isEditMode = ref(false)
+
+const LS_KEYS = {
+  vgl: 'demo-layout-vue-grid-layout',
+  gs: 'demo-layout-gridstack',
+}
+
+const presets = {
+  sm: { w: 3, h: 3 },
+  md: { w: 4, h: 4 },
+  lg: { w: 6, h: 4 },
+}
+
+/**
+ * A) vue-grid-layout data
+ * layout item 格式：{ x, y, w, h, i, title, content }
+ */
+const vglLayout = ref(defaultVglLayout())
+let vglCounter = nextCounterFromVgl(vglLayout.value)
+
+/**
+ * B) gridstack data
+ * item 格式：{ id, x, y, w, h, title, content }
+ */
+const gsItems = ref(defaultGsItems())
+let gsCounter = nextCounterFromGs(gsItems.value)
+
+/**
+ * GridStack instance
+ */
+const gridRef = ref(null)
+let grid = null
+
+/**
+ * UI actions
+ */
+function toggleEditMode() {
+  isEditMode.value = !isEditMode.value
+  // gridstack: 即時切換 enable/disable
+  if (grid) {
+    grid.enableMove(isEditMode.value)
+    grid.enableResize(isEditMode.value)
   }
-]);
+}
 
-const selectedNodeId = ref(null);
+function addItemPreset(sizeKey) {
+  const { w, h } = presets[sizeKey] || presets.md
+  addItem(w, h)
+}
 
-const handleNodeClick = (path) => {
-  const clickedNode = path[path.length - 1];
-  selectedNodeId.value = clickedNode.name;
-};
+function addItem(w, h) {
+  if (!isEditMode.value) return
 
-// --- 更新锁定ID列表 ---
-const updateLockedIds = () => {
-  const ids = lockedIdsInput.value
-    .split(',')
-    .map(s => parseInt(s.trim()))
-    .filter(n => !isNaN(n));
-  lockedIdList.value = ids;
-  setNodesChecked(treeData, [...ids, ...defaultRemovableIds.value]);
-};
-
-const setNodesChecked = (nodes, ids) => {
-  for (const node of nodes) {
-    if (ids.includes(node.id)) {
-      node.checked = true;
-    }
-    if (node.children && node.children.length > 0) {
-      setNodesChecked(node.children, ids);
-    }
+  if (engine.value === 'vue-grid-layout') {
+    const id = String(vglCounter++)
+    // 交給 vgl 自己透過 compact/collision 找位置：
+    // 以 y=0 放在最上方，必要時會往下推。
+    vglLayout.value.push({
+      x: 0,
+      y: 0,
+      w,
+      h,
+      i: id,
+      title: `卡片 ${id}`,
+      content: `這是 vue-grid-layout 產生的卡片（id=${id}）。\n你可以在編輯模式拖曳/縮放，並保存/載入。`,
+    })
+    return
   }
-};
 
+  // gridstack：交給引擎 autoPosition
+  const id = String(gsCounter++)
+  const newItem = {
+    id,
+    x: undefined,
+    y: undefined,
+    w,
+    h,
+    title: `卡片 ${id}`,
+    content: `這是 gridstack 產生的卡片（id=${id}）。\n你可以在編輯模式拖曳/縮放，並保存/載入。`,
+  }
+
+  gsItems.value.push(newItem)
+
+  // 關鍵：Vue render 完成後，再 makeWidget，並用 autoPosition。
+  nextTick(() => {
+    if (!grid || !gridRef.value) return
+    const el = gridRef.value.querySelector(`[gs-id="${id}"]`)
+    if (!el) return
+
+    // 讓 GridStack 接管這個 DOM（不要用 addWidget 去新增 DOM，避免跟 Vue 打架）
+    grid.makeWidget(el)
+    grid.update(el, { w, h, autoPosition: true })
+
+    const node = el.gridstackNode
+    if (node) {
+      newItem.x = node.x
+      newItem.y = node.y
+      newItem.w = node.w
+      newItem.h = node.h
+    }
+  })
+}
+
+function removeItem(id) {
+  if (engine.value === 'vue-grid-layout') {
+    const idx = vglLayout.value.findIndex((x) => x.i === id)
+    if (idx >= 0) vglLayout.value.splice(idx, 1)
+    return
+  }
+
+  const idx = gsItems.value.findIndex((x) => x.id === id)
+  if (idx < 0) return
+
+  if (grid && gridRef.value) {
+    const el = gridRef.value.querySelector(`[gs-id="${id}"]`)
+    if (el) grid.removeWidget(el, false)
+  }
+
+  gsItems.value.splice(idx, 1)
+}
+
+function saveLayout() {
+  if (engine.value === 'vue-grid-layout') {
+    const payload = vglLayout.value.map((it) => pickLayoutItem(it))
+    localStorage.setItem(LS_KEYS.vgl, JSON.stringify(payload))
+    alert('已保存 vue-grid-layout 佈局到 localStorage')
+    return
+  }
+
+  // gridstack：從 DOM node 取最新 x/y/w/h，確保保存的是最新狀態
+  const payload = gsItems.value.map((it) => {
+    const node = getGridstackNodeById(it.id)
+    return {
+      id: it.id,
+      x: node?.x ?? it.x,
+      y: node?.y ?? it.y,
+      w: node?.w ?? it.w,
+      h: node?.h ?? it.h,
+      title: it.title,
+      content: it.content,
+    }
+  })
+
+  localStorage.setItem(LS_KEYS.gs, JSON.stringify(payload))
+  alert('已保存 gridstack 佈局到 localStorage')
+}
+
+async function loadLayout() {
+  if (engine.value === 'vue-grid-layout') {
+    const raw = localStorage.getItem(LS_KEYS.vgl)
+    const data = safeParseArray(raw)
+    if (!data.length) {
+      alert('找不到已保存的 vue-grid-layout 佈局')
+      return
+    }
+
+    // 直接替換 layout
+    vglLayout.value = data.map((it) => ({
+      ...it,
+      i: String(it.i),
+    }))
+    vglCounter = nextCounterFromVgl(vglLayout.value)
+    alert('已載入 vue-grid-layout 佈局')
+    return
+  }
+
+  const raw = localStorage.getItem(LS_KEYS.gs)
+  const data = safeParseArray(raw)
+  if (!data.length) {
+    alert('找不到已保存的 gridstack 佈局')
+    return
+  }
+
+  // 先把 gridstack 清空
+  destroyGridstackWidgetsOnly()
+
+  gsItems.value = data.map((it) => ({
+    id: String(it.id),
+    x: it.x,
+    y: it.y,
+    w: it.w,
+    h: it.h,
+    title: it.title ?? `卡片 ${it.id}`,
+    content: it.content ?? '',
+  }))
+  gsCounter = nextCounterFromGs(gsItems.value)
+
+  await nextTick()
+
+  // 重新讓 GridStack 接管 DOM
+  ensureGridstackMounted()
+  batchMakeWidgets()
+
+  alert('已載入 gridstack 佈局')
+}
+
+function resetToDefault() {
+  if (engine.value === 'vue-grid-layout') {
+    vglLayout.value = defaultVglLayout()
+    vglCounter = nextCounterFromVgl(vglLayout.value)
+    return
+  }
+
+  destroyGridstackWidgetsOnly()
+  gsItems.value = defaultGsItems()
+  gsCounter = nextCounterFromGs(gsItems.value)
+
+  nextTick(() => {
+    ensureGridstackMounted()
+    batchMakeWidgets()
+  })
+}
+
+/**
+ * gridstack lifecycle
+ */
 onMounted(() => {
-  // 初始化时，选中 锁定ID 和 默认可移除ID
-  setNodesChecked(treeData, [...lockedIdList.value, ...defaultRemovableIds.value]);
-});
-
-// --- Search Logic ---
-watch(filterText, (val) => {
-  filterTree(treeData, val);
-});
-
-const filterTree = (nodes, query) => {
-  let hasVisible = false;
-  for (const node of nodes) {
-    if (!query) {
-      node.visible = true;
-      if (node.children) {
-        filterTree(node.children, query);
-      }
-      continue;
-    }
-
-    let childVisible = false;
-    if (node.children) {
-      childVisible = filterTree(node.children, query);
-    }
-
-    const selfVisible = node.name.toLowerCase().includes(query.toLowerCase());
-    node.visible = selfVisible || childVisible;
-
-    if (childVisible) {
-      node.isOpen = true;
-    }
-    
-    if (node.visible) hasVisible = true;
+  // 只在 gridstack mode 需要 init；但使用者可能在第一次載入就切換
+  if (engine.value === 'gridstack') {
+    nextTick(() => {
+      ensureGridstackMounted()
+      batchMakeWidgets()
+    })
   }
-  return hasVisible;
-};
+})
 
-// --- Checkbox Logic ---
-const getCheckedNodes = (nodes) => {
-  let checked = [];
-  for (const node of nodes) {
-    if (node.checked && node.type) {
-      checked.push(node);
-    }
-    if (node.children && node.children.length > 0) {
-      checked = checked.concat(getCheckedNodes(node.children));
+onBeforeUnmount(() => {
+  if (grid) {
+    grid.destroy(false)
+    grid = null
+  }
+})
+
+watch(
+  () => engine.value,
+  async (next) => {
+    if (next !== 'gridstack') return
+
+    // 切換到 gridstack 時：確保 grid init & widgets 接管
+    await nextTick()
+    ensureGridstackMounted()
+    batchMakeWidgets()
+
+    // 套用目前的 edit mode
+    if (grid) {
+      grid.enableMove(isEditMode.value)
+      grid.enableResize(isEditMode.value)
     }
   }
-  return checked;
-};
+)
 
-const checkedNodes = computed(() => {
-  return getCheckedNodes(treeData);
-});
+function ensureGridstackMounted() {
+  if (grid || !gridRef.value) return
 
-// 计算被取消的默认选项
-const removedDefaultOptions = computed(() => {
-  const currentCheckedIds = checkedNodes.value.map(n => n.id);
-  const missingIds = defaultRemovableIds.value.filter(id => !currentCheckedIds.includes(id));
-  
-  if (missingIds.length === 0) return [];
+  grid = GridStack.init(
+    {
+      column: 12,
+      cellHeight: 40,
+      margin: 10,
+      float: false,
+      disableDrag: !isEditMode.value,
+      disableResize: !isEditMode.value,
+      animate: true,
+    },
+    gridRef.value
+  )
 
-  const missingNodes = [];
-  const findMissing = (nodes) => {
-    for (const node of nodes) {
-      if (missingIds.includes(node.id)) {
-        missingNodes.push(node);
-      }
-      if (node.children) findMissing(node.children);
-    }
-  };
-  findMissing(treeData);
-  return missingNodes;
-});
+  grid.on('change', (_event, changedItems) => {
+    // 使用 change 事件同步資料
+    changedItems.forEach((n) => {
+      const id = String(n.id)
+      const it = gsItems.value.find((x) => x.id === id)
+      if (!it) return
+      it.x = n.x
+      it.y = n.y
+      it.w = n.w
+      it.h = n.h
+    })
+  })
+}
 
-// 计算总叶子节点数
-const countLeafNodes = (nodes) => {
-  let count = 0;
-  for (const node of nodes) {
-    if (node.type) {
-      count++;
-    }
-    if (node.children && node.children.length > 0) {
-      count += countLeafNodes(node.children);
-    }
+function batchMakeWidgets() {
+  if (!grid || !gridRef.value) return
+  grid.batchUpdate()
+
+  gsItems.value.forEach((it) => {
+    const el = gridRef.value.querySelector(`[gs-id="${it.id}"]`)
+    if (!el) return
+
+    // makeWidget 會讀取 gs-x/gs-y/gs-w/gs-h attrs
+    grid.makeWidget(el)
+  })
+
+  grid.batchUpdate(false)
+}
+
+function destroyGridstackWidgetsOnly() {
+  // 用於載入/重置前，清掉目前 widgets，但保留 grid instance
+  if (grid) {
+    grid.removeAll(false)
   }
-  return count;
-};
+}
 
-const totalLeafCount = computed(() => countLeafNodes(treeData));
+function getGridstackNodeById(id) {
+  if (!gridRef.value) return null
+  const el = gridRef.value.querySelector(`[gs-id="${id}"]`)
+  return el?.gridstackNode ?? null
+}
 
-// 检查是否有未选中的节点
-const hasUncheckedNodes = computed(() => {
-  const checkUnchecked = (nodes) => {
-    for (const node of nodes) {
-      if (node.type && !node.checked) return true;
-      if (node.children && checkUnchecked(node.children)) return true;
-    }
-    return false;
-  };
-  return checkUnchecked(treeData);
-});
-
-// 检查是否有可移除的节点
-const hasRemovableNodes = computed(() => {
-  return checkedNodes.value.some(node => !lockedIdList.value.includes(node.id));
-});
-
-// 添加所有可见的未选中节点
-const addAllVisible = () => {
-  const addNodes = (nodes) => {
-    for (const node of nodes) {
-      if (node.type && !node.checked && node.visible !== false) {
-        node.checked = true;
-      }
-      if (node.children) {
-        addNodes(node.children);
-      }
-    }
-  };
-  addNodes(treeData);
-};
-
-// 移除所有未锁定的节点
-const removeAllUnlocked = () => {
-  const removeNodes = (nodes) => {
-    for (const node of nodes) {
-      if (node.type && node.checked && !lockedIdList.value.includes(node.id)) {
-        node.checked = false;
-      }
-      if (node.children) {
-        removeNodes(node.children);
-      }
-    }
-  };
-  removeNodes(treeData);
-};
-
-// 恢复默认：保留锁定的节点 和 默认可移除的节点
-const resetToDefault = () => {
-  const resetNodes = (nodes) => {
-    for (const node of nodes) {
-      if (node.type) {
-        // 锁定的 OR 默认可移除的 保持选中
-        const isLocked = lockedIdList.value.includes(node.id);
-        const isDefaultRemovable = defaultRemovableIds.value.includes(node.id);
-        node.checked = isLocked || isDefaultRemovable;
-      }
-      if (node.children) {
-        resetNodes(node.children);
-      }
-    }
-  };
-  resetNodes(treeData);
-};
-
-const removeTag = (node) => {
-  if (lockedIdList.value.includes(node.id)) {
-    return;
+/**
+ * helpers
+ */
+function safeParseArray(raw) {
+  if (!raw) return []
+  try {
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
   }
-  node.checked = false;
-};
+}
+
+function pickLayoutItem(it) {
+  return {
+    i: String(it.i),
+    x: Number(it.x ?? 0),
+    y: Number(it.y ?? 0),
+    w: Number(it.w ?? 1),
+    h: Number(it.h ?? 1),
+    title: String(it.title ?? `卡片 ${it.i}`),
+    content: String(it.content ?? ''),
+  }
+}
+
+function nextCounterFromVgl(layout) {
+  const nums = layout
+    .map((x) => parseInt(String(x.i), 10))
+    .filter((n) => Number.isFinite(n))
+  return (nums.length ? Math.max(...nums) : 0) + 1
+}
+
+function nextCounterFromGs(items) {
+  const nums = items
+    .map((x) => parseInt(String(x.id), 10))
+    .filter((n) => Number.isFinite(n))
+  return (nums.length ? Math.max(...nums) : 0) + 1
+}
+
+function defaultVglLayout() {
+  return [
+    { x: 0, y: 0, w: 4, h: 4, i: '1', title: '卡片 1', content: '內容 A（vue-grid-layout）' },
+    { x: 4, y: 0, w: 4, h: 4, i: '2', title: '卡片 2', content: '內容 B（vue-grid-layout）' },
+    { x: 8, y: 0, w: 4, h: 6, i: '3', title: '卡片 3', content: '內容 C（vue-grid-layout）' },
+  ]
+}
+
+function defaultGsItems() {
+  return [
+    { id: '1', x: 0, y: 0, w: 4, h: 3, title: '卡片 1', content: '內容 A（gridstack）' },
+    { id: '2', x: 4, y: 0, w: 4, h: 3, title: '卡片 2', content: '內容 B（gridstack）' },
+    { id: '3', x: 8, y: 0, w: 4, h: 4, title: '卡片 3', content: '內容 C（gridstack）' },
+  ]
+}
 </script>
 
-<style lang="scss" scoped>
-#app-wrapper {
-  padding: 40px;
-  min-height: 100vh;
-  background-color: #f5f7fa;
+<style>
+:root {
+  --c-bg: #0b1220;
+  --c-panel: #0f1a2e;
+  --c-card: #ffffff;
+  --c-text: #eaf0ff;
+  --c-text-dim: rgba(234, 240, 255, 0.7);
+  --c-border: rgba(255, 255, 255, 0.12);
+  --c-primary: #4caf50;
+  --c-danger: #ff4d4f;
 }
 
-.demo-container {
-  max-width: 800px;
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(900px 500px at 20% 0%, rgba(76, 175, 80, 0.22), transparent 55%),
+    radial-gradient(900px 500px at 70% 20%, rgba(66, 133, 244, 0.22), transparent 55%),
+    var(--c-bg);
+  color: var(--c-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+}
+</style>
+
+<style scoped>
+.page {
+  padding: 16px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 30px;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-
-  h1 {
-    margin: 0 0 10px 0;
-    font-size: 24px;
-    color: #303133;
-  }
-
-  p {
-    margin: 0 0 20px 0;
-    color: #606266;
-  }
 }
 
-.selected-preview {
+.toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 20px;
+  justify-content: space-between;
+  gap: 12px;
   padding: 12px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
-
-  .preview-label {
-    color: #606266;
-    font-size: 14px;
-  }
-
-  .preview-tag {
-    margin: 0;
-  }
+  background: rgba(15, 26, 46, 0.8);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
 }
 
-/* --- 锁定ID区域样式 --- */
-.locked-ids-area {
-  margin-top: 30px;
-  padding: 20px;
-  background-color: #f5f7fa;
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-}
-
-.locked-ids-header {
-  margin-bottom: 12px;
-  
-  h3 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 500;
-    color: #303133;
-  }
-}
-
-.locked-ids-input {
-  margin-bottom: 12px;
-}
-
-.locked-ids-display {
+.toolbar__left,
+.toolbar__right {
   display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
-  gap: 8px;
 }
 
-.locked-id-tag {
-  background-color: #ecf5ff;
-  border-color: #d9ecff;
-  color: #409eff;
+.divider {
+  width: 1px;
+  height: 28px;
+  background: var(--c-border);
 }
 
-/* --- 穿梭框弹框样式 --- */
-:deep(.transfer-dialog) {
-  .el-dialog__body {
-    padding: 0;
-  }
-}
-
-.transfer-container {
-  display: flex;
-  align-items: stretch;
-  height: 450px;
-}
-
-.transfer-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  background-color: #fff;
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
   overflow: hidden;
 }
 
-.transfer-panel-header {
+.seg__btn {
+  border: none;
+  background: transparent;
+  color: var(--c-text-dim);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.seg__btn.is-active {
+  background: rgba(234, 240, 255, 0.12);
+  color: var(--c-text);
+}
+
+.btn {
+  border: 1px solid var(--c-border);
+  background: rgba(234, 240, 255, 0.06);
+  color: var(--c-text);
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: rgba(234, 240, 255, 0.12);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.is-active {
+  border-color: rgba(76, 175, 80, 0.6);
+  box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.25) inset;
+}
+
+.btn--danger {
+  border-color: rgba(255, 77, 79, 0.45);
+}
+
+.hint {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: rgba(15, 26, 46, 0.7);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+}
+
+.hint__title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.hint ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--c-text-dim);
+  line-height: 1.55;
+}
+
+.stage {
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(15, 26, 46, 0.55);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+}
+
+.stage__title {
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+/* vue-grid-layout tweaks */
+:deep(.vue-grid-layout) {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+}
+
+:deep(.vue-grid-item) {
+  touch-action: none;
+}
+
+/* gridstack tweaks */
+.grid-stack {
+  min-height: 560px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+}
+
+.grid-stack-item-content {
+  height: 100%;
+}
+
+/* card */
+.card {
+  height: 100%;
+  background: var(--c-card);
+  border-radius: 12px;
+  overflow: hidden;
+  color: #1c2333;
+  border: 1px solid rgba(15, 26, 46, 0.12);
+  display: flex;
+  flex-direction: column;
+}
+
+.card__header {
+  padding: 10px 12px;
+  background: #f4f6fb;
+  border-bottom: 1px solid rgba(15, 26, 46, 0.12);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 40px;
-  padding: 0 15px;
-  background-color: #f5f7fa;
-  border-bottom: 1px solid #ebeef5;
-  box-sizing: border-box;
-}
-
-.transfer-panel-header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.transfer-panel-title {
-  font-size: 14px;
-  color: #303133;
-  font-weight: 500;
-}
-
-.transfer-panel-count {
-  font-size: 12px;
-  color: #909399;
-}
-
-.transfer-panel-filter {
-  padding: 10px 15px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.transfer-panel-body {
-  flex: 1;
-  overflow-y: auto;
-  
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  &::-webkit-scrollbar-thumb {
-    background-color: #c0c4cc;
-    border-radius: 3px;
-    
-    &:hover {
-      background-color: #909399;
-    }
-  }
-  
-  &::-webkit-scrollbar-track {
-    background-color: #f5f7fa;
-  }
-}
-
-.tree-wrapper {
-  padding: 8px 0;
-}
-
-/* --- 中间按钮样式 --- */
-.transfer-buttons {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 16px;
-  padding: 0 20px;
-}
-
-/* --- 右侧已选标签样式 --- */
-.tags-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 15px;
-  align-content: flex-start;
-}
-
-.selected-tag {
-  margin: 0;
-  background-color: #ecf5ff;
-  border-color: #d9ecff;
-  color: #409eff;
-  
-  &:hover {
-    background-color: #d9ecff;
-  }
-  
-  :deep(.el-tag__close) {
-    color: #409eff;
-    
-    &:hover {
-      background-color: #409eff;
-      color: #fff;
-    }
-  }
-}
-
-.transfer-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #909399;
-  font-size: 14px;
-}
-
-/* --- 右侧底部提示样式 --- */
-.transfer-panel-footer {
-  border-top: 1px solid #ebeef5;
-  background-color: #fdf6ec;
-  padding: 10px 15px;
-}
-
-.removed-defaults-alert {
-  font-size: 12px;
-  color: #e6a23c;
-}
-
-.alert-title {
-  display: flex;
-  align-items: center;
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.removed-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-left: 18px; /* Align with text start */
-}
-
-.removed-item-text {
-  color: #e6a23c;
-  background-color: rgba(230, 162, 60, 0.1);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
   gap: 10px;
 }
 
-/* --- 树形组件根样式 --- */
-:deep(.tree-node-root) {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.card__title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.card__delete {
+  border: none;
+  background: rgba(255, 77, 79, 0.9);
+  color: #fff;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.card__delete:hover {
+  background: rgba(255, 77, 79, 1);
+}
+
+.card__content {
+  padding: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  flex: 1;
+  overflow: auto;
 }
 </style>

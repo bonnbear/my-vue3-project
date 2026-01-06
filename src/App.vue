@@ -58,6 +58,7 @@
 </template>
 
 <script setup>
+// 測試註釋：驗證 githubmcp 推送功能
 import { defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { GridStack } from 'gridstack'
